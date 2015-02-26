@@ -1,5 +1,6 @@
 #include <string>
 #include <unistd.h>
+#include <cmath>
 
 #include "itkImage.h"
 #include "itkImageSeriesReader.h"
@@ -7,13 +8,16 @@
 #include "itkNumericSeriesFileNames.h"
 #include "itkTIFFImageIO.h"
 
+size_t get_memsize(void);
+
 int main( int argc, char ** argv )
 {
     // Verify the number of parameters in the command line
-    if (argc < 4) {
+    if (argc < 6) {
         std::cerr << "Usage: " << std::endl;
         std::cerr << argv[0] << " inputDirectory" << " firstSliceValue"
-                  << " lastSliceValue" << " outputImageFile" << std::endl;
+                  << " lastSliceValue" << " outputImageFile"
+                  << " memCoefficient" << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -29,6 +33,7 @@ int main( int argc, char ** argv )
     const unsigned int first = std::stoi(argv[2]);
     const unsigned int last  = std::stoi(argv[3]);
     const char * outputFilename = argv[4];
+    const float memUsageCoefficient = std::stof(argv[5]);
 
     auto nameGenerator = itk::NumericSeriesFileNames::New();
 
@@ -44,18 +49,16 @@ int main( int argc, char ** argv )
     reader->SetFileNames( nameGenerator->GetFileNames() );
     // Enable streaming reads so we don't read the whole thing into memory
     reader->SetUseStreaming(true);
+    reader->GenerateOutputInformation();
 
-    // Trying to get width/height data for slices
-    auto metadataDict = (*(reader->GetMetaDataDictionaryArray()))[0];
-    for (std::string key : metadataDict->GetKeys()) {
-        std::cout << key << std::endl;
-    }
-    exit(1);
-
+    // Compute appropriate number of divisions based on requested memory size
+    ImageType::SizeType fullsize = reader->GetOutput()->GetLargestPossibleRegion().GetSize();
+    auto volumeSize = fullsize[0] * fullsize[1] * fullsize[2];
+    auto streamDivisions = (uint32_t) ceil(volumeSize / (memUsageCoefficient * get_memsize()));
 
     writer->SetFileName( outputFilename );
     writer->SetInput( reader->GetOutput() );
-    writer->SetNumberOfStreamDivisions(32);
+    writer->SetNumberOfStreamDivisions(streamDivisions);
 
     try {
         writer->Update();
