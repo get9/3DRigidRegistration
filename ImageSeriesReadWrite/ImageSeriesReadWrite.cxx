@@ -1,4 +1,5 @@
 #include <string>
+#include <unistd.h>
 
 #include "itkImage.h"
 #include "itkImageSeriesReader.h"
@@ -44,6 +45,14 @@ int main( int argc, char ** argv )
     // Enable streaming reads so we don't read the whole thing into memory
     reader->SetUseStreaming(true);
 
+    // Trying to get width/height data for slices
+    auto metadataDict = (*(reader->GetMetaDataDictionaryArray()))[0];
+    for (std::string key : metadataDict->GetKeys()) {
+        std::cout << key << std::endl;
+    }
+    exit(1);
+
+
     writer->SetFileName( outputFilename );
     writer->SetInput( reader->GetOutput() );
     writer->SetNumberOfStreamDivisions(32);
@@ -57,4 +66,12 @@ int main( int argc, char ** argv )
     }
 
     return EXIT_SUCCESS;
+}
+
+// Get the system memory size for stream division configuration
+size_t get_memsize(void)
+{
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    return pages * page_size;
 }
