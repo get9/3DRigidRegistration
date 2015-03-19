@@ -1,5 +1,6 @@
 #include <string>
 #include <cmath>
+#include <cstdlib>
 
 #include "itkImage.h"
 #include "itkImageFileReader.h"
@@ -93,7 +94,7 @@ int main( int argc, char * argv[] )
     axes[1] = 0.0;
     axes[2] = 1.0;
     TransformType::VersorType rotation;
-    rotation.Set(axes, deg2rad(std::stod(argv[3])));
+    rotation.Set(axes, deg2rad(atof(argv[3])));
     transform->SetRotation(rotation);
 
     //    The third and final step requires translating the image origin back to

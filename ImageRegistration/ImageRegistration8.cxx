@@ -264,7 +264,7 @@ int main( int argc, char *argv[] )
 
   // Software Guide : BeginCodeSnippet
   // Decide to use this if we have the time to or not
-  initializer->MomentsOn();
+  initializer->GeometryOn();
   // Software Guide : EndCodeSnippet
 
   //  Software Guide : BeginLatex

@@ -55,10 +55,10 @@ class CommandIterationUpdate : public itk::Command
 
 int main( int argc, char *argv[] )
 {
-    if( argc < 4 ) {
+    if( argc < 3 ) {
         std::cerr << "Missing Parameters " << std::endl;
         std::cerr << "Usage:" << std::endl;
-        std::cerr << argv[0] << " fixedImageFile  movingImageFile" << std::endl;
+        std::cerr << argv[0] << " fixedImageFile movingImageFile" << std::endl;
         return EXIT_FAILURE;
     }
     const unsigned int Dimension = 3;
