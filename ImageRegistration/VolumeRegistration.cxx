@@ -104,6 +104,8 @@ int main( int argc, char *argv[] )
     initializer->GeometryOn();
     initializer->InitializeTransform();
 
+    initialTransform->SetIdentity();
+
     // Initialize the transform parameters
     typedef TransformType::VersorType VersorType;
     typedef VersorType::VectorType VectorType;
@@ -165,7 +167,7 @@ int main( int argc, char *argv[] )
                   << registration->GetOptimizer()->GetStopConditionDescription()
                   << std::endl;
     }
-    catch( itk::ExceptionObject & err ) {
+    catch(itk::ExceptionObject& err) {
         std::cerr << "ExceptionObject caught !" << std::endl;
         std::cerr << err << std::endl;
         return EXIT_FAILURE;
@@ -185,7 +187,6 @@ int main( int argc, char *argv[] )
     const double bestValue = optimizer->GetValue();
 
     // Print out results
-    //
     std::cout << std::endl << std::endl;
     std::cout << "Result = " << std::endl;
     std::cout << " versor X      = " << versorX << std::endl;
@@ -196,6 +197,16 @@ int main( int argc, char *argv[] )
     std::cout << " Translation Z = " << finalTranslationZ  << std::endl;
     std::cout << " Iterations    = " << numberOfIterations << std::endl;
     std::cout << " Metric value  = " << bestValue << std::endl;
+    std::cout << std::endl;
+
+    // Print out transformation matrix
+    TransformType::Pointer finalTransform = TransformType::New();
+    finalTransform->SetFixedParameters(registration->GetOutput()->Get()->GetFixedParameters());
+    finalTransform->SetParameters(finalParameters);
+    TransformType::MatrixType matrix = finalTransform->GetMatrix();
+    TransformType::OffsetType offset = finalTransform->GetOffset();
+    std::cout << "Matrix = " << std::endl << matrix << std::endl;
+    std::cout << "Offset = " << std::endl << offset << std::endl;
 
     return EXIT_SUCCESS;
 }
