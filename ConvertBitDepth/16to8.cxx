@@ -4,7 +4,7 @@ int main(int argc, char **argv)
 {
     if (argc < 3) {
         std::cerr << "Usage:" << std::endl;
-        std::cerr << "    " << argv[0] << " infile outfile [dim]" << std::endl;
+        std::cerr << "    " << argv[0] << " infile outfile" << std::endl;
         return EXIT_FAILURE;
     }
     

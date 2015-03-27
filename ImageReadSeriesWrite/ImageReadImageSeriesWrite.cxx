@@ -1,3 +1,6 @@
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include "itkImage.h"
 #include "itkImageFileReader.h"
 #include "itkImageSeriesWriter.h"
@@ -11,15 +14,14 @@ template <typename PixelType>
 bool doConvert(std::string inputFile, std::string outputDir)
 {
     // Create reader
-    typedef itk::Image<Pixeltype, MhdDimension> ImageType;
-    typedef itk::ImageFileReader<ImageType> ReaderType;
-    ReaderType::Pointer reader = ReaderType::New();
+    auto reader = itk::ImageFileReader< itk::Image<PixelType, MhdDimension> >::New();
     reader->SetFileName(inputFile);
 
     // Create writer, connect to reader
-    typedef itk::Image<PixelType, SliceDimension> Image2DType;
-    typedef itk::ImageSeriesWriter<ImageType, Image2DType> WriterType;
-    WriterType::Pointer writer = WriterType::New();
+    auto writer = itk::ImageSeriesWriter<
+        itk::Image<PixelType, MhdDimension>,
+        itk::Image<PixelType, SliceDimension>
+    >::New();
     writer->SetInput(reader->GetOutput());
 
     // Execute read
@@ -33,7 +35,7 @@ bool doConvert(std::string inputFile, std::string outputDir)
     }
 
     // Get slice start/end from read image
-    const auto region = reader->GetOutput()->GetLargestPossibleRegion()
+    const auto region = reader->GetOutput()->GetLargestPossibleRegion();
     const auto start = region.GetIndex();
     const auto size = region.GetSize();
     const uint32_t firstSlice = start[2];
@@ -73,6 +75,20 @@ int main( int argc, char *argv[] )
     // Parse/validate args
     const std::string inputFile = std::string(argv[1]);
     const std::string outputDir = std::string(argv[2]);
+    struct stat statbuf;
+    // handy way to check if directory exists. If not, create it, because ITK doesn't do it for you
+    // like it does when you're doing a SeriesRead
+    if (stat(outputDir.c_str(), &statbuf) == -1) {
+        // Create new directory with permissions rwxrw-rw-
+        if (mkdir(outputDir.c_str(), 0766) == -1) {
+            std::cerr << "[error]: could not create dir '" << outputDir << "'" << std::endl;
+            perror("mkdir");
+            return EXIT_FAILURE;
+        }
+    } else if (!S_ISDIR(statbuf.st_mode)) {
+        std::cerr << "[error]: '" << outputDir << "' is not a directory" << std::endl;
+        return EXIT_FAILURE;
+    }
     const uint32_t bitdepth = std::stoi(argv[3]);
     if (bitdepth != 8 && bitdepth != 16) {
         std::cerr << "[error]: bitDepth must be one of {8, 16}" << std::endl;
