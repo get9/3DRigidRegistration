@@ -9,7 +9,7 @@
 // Filters
 #include "itkHMinimaImageFilter.h"
 #include "itkBinaryThresholdImageFilter.h"
-#include "itkBinaryImageToLabelMapFilter.h"
+#include "itkBinaryImageToShapeLabelMapFilter.h"
 
 // PointSet
 #include "itkPointSet.h"
@@ -51,20 +51,29 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
 
     // Run binary image to label filter. This will label all the regions that
     // are non-zero (due to thresholding).
-    auto labelMapFilter = itk::BinaryImageToLabelMapFilter<ImageType>::New();
+    auto labelMapFilter = itk::BinaryImageToShapeLabelMapFilter<ImageType>::New();
     labelMapFilter->SetInput(thresholdFilter->GetOutput());
-    labelMapFilter->Update();
 
     // Run pipeline
     labelMapFilter->Update();
 
-    
-    // Change to PointSet
-    // Some helpful aliases
+    // Add centroids of grains to PointSet
+    // XXX start at 1 because label 0 is the background object (i.e. all black)
     using PointSetType = itk::PointSet<PixelType, Dimension>;
     using IteratorType = itk::ImageRegionConstIterator<ImageType>;
     using PointType = typename PointSetType::PointType;
 
+    auto pointSet = itk::PointSet<PixelType, Dimension>::New();
+    const auto labelMapFilterOutput = labelMapFilter->GetOutput();
+    for (uint32_t i = 1; i <= labelMapFilterOutput->GetNumberOfLabelObjects(); ++i) {
+        const auto shapeLabelObject = labelMapFilterOutput->GetLabelObject(i);
+        std::cout << i << "\t" << shapeLabelObject->GetCentroid() << std::endl;
+        pointSet->SetPoint(i - 1, shapeLabelObject->GetCentroid());
+    }
+
+    std::cout << pointSet << std::endl;
+
+    /*
     // The image we're iterating over and it's associated iterator
     auto image = thresholdFilter->GetOutput();
     IteratorType it(image, image->GetRequestedRegion());
@@ -89,20 +98,24 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
         ++it;
     }
 
-    std::cout << "Number of points: " << pointSet->GetNumberOfPoints() << std::endl;
+    // Write PointSet to just a text file
+    auto points = pointSet->GetPoints();
+    auto iter = points->Begin();
+    while (iter != points->End()) {
+
+    }
 
     // Segment?
 
     // Compute bounding boxes
 
     // Write to PCL-compatible output
+    */
 
     // Set and configure writer
     auto writer = itk::ImageFileWriter<ImageType>::New();
     writer->SetFileName(outputFile);
     writer->SetInput(thresholdFilter->GetOutput());
-
-    // Execute pipeline
     writer->Update();
 
     // Print out number of labels
