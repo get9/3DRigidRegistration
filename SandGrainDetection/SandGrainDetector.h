@@ -1,5 +1,6 @@
 #include <string>
 #include <cmath> // floor()
+#include <limits> // numeric_limits<T>::max()
 
 // I/O
 #include "itkImage.h"
@@ -7,7 +8,7 @@
 #include "itkImageFileWriter.h"
 
 // Filters
-#include "itkHMinimaImageFilter.h"
+#include "itkHConvexImageFilter.h"
 #include "itkBinaryThresholdImageFilter.h"
 #include "itkBinaryImageToShapeLabelMapFilter.h"
 
@@ -22,7 +23,7 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     using ImageType = itk::Image<PixelType, Dimension>;
 
     // The max unsigned representable value by PixelType
-    const PixelType pixelTypeMax = (1 << (sizeof(PixelType) * 8)) - 1;
+    const PixelType pixelTypeMax = std::numeric_limits<PixelType>::max();
 
     // Set and configure reader
     auto reader = itk::ImageFileReader<ImageType>::New();
@@ -31,7 +32,7 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     // For the following filters, the parameter is configured with the input
     // param, which is a percentage (in range [0, 1]).
     // Set and configure HMinimaImageFilter
-    auto minFilter = itk::HMinimaImageFilter<ImageType, ImageType>::New();
+    auto minFilter = itk::HConvexImageFilter<ImageType, ImageType>::New();
     const PixelType hIntensityUnits = PixelType( floor(H * pixelTypeMax) );
     std::cout << "hIntensityUnits = " << uint32_t(hIntensityUnits) << std::endl;
     minFilter->SetHeight(hIntensityUnits);
@@ -71,7 +72,7 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
         pointSet->SetPoint(i - 1, shapeLabelObject->GetCentroid());
     }
 
-    std::cout << pointSet << std::endl;
+    //std::cout << pointSet << std::endl;
 
     /*
     // The image we're iterating over and it's associated iterator
