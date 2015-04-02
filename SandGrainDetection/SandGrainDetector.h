@@ -8,7 +8,9 @@
 #include "itkImageFileWriter.h"
 
 // Filters
-#include "itkHConvexImageFilter.h"
+#include "itkMultiScaleHessianBasedMeasureFilter.h"
+#include "itkHessianToObjectnessMeasureImageFilter.h"
+#include "itkRescaleIntensityFilter.h"
 #include "itkBinaryThresholdImageFilter.h"
 #include "itkBinaryImageToShapeLabelMapFilter.h"
 
@@ -29,18 +31,36 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     auto reader = itk::ImageFileReader<ImageType>::New();
     reader->SetFileName(inputFile);
  
-    // For the following filters, the parameter is configured with the input
-    // param, which is a percentage (in range [0, 1]).
-    // Set and configure HMinimaImageFilter
-    auto minFilter = itk::HConvexImageFilter<ImageType, ImageType>::New();
-    const PixelType hIntensityUnits = PixelType( floor(H * pixelTypeMax) );
-    std::cout << "hIntensityUnits = " << uint32_t(hIntensityUnits) << std::endl;
-    minFilter->SetHeight(hIntensityUnits);
-    minFilter->SetInput(reader->GetOutput());
+    using HessianPixelType = itk::SymmetricSecondRankTensor<double, Dimension>;
+    using HessianImageType = itk::Image<HessianPixeltype, Dimension>;
+    using ObjectnessFilterType =
+        itk::HessiantoObjectnessMeasureImageFilter<HessianImageType, ImageType>;
+    auto objectnessFilter = ObjectnessFilterType::New();
+    objectnessFilter->SetBrightObject(true);
+    objectnessFilter->SetScaleObjectnessMeasure(false);
+    objectnessFilter->SetAlpha(0.5);
+    objectnessFilter->SetBeta(1.0);
+    objectnessFilter->SetGamma(5.0);
+
+    using MultiScaleEnhancementFilterType =
+        itk::MultiScaleHessianBasedMeasureFilter<ImageType, HessianImageType, ImageType>::New();
+    const double sigmaMinimum = 1.0;
+    const double sigmaMaximum = 10.0;
+    const uint32_t numberOfSigmaSteps = 10;
+    auto multiScaleEnhancementFilter = MultiScaleEnhancementFilter::New();
+    multiScaleEnhancementFilter->SetInput(reader->GetOutput());
+    multiScaleEnhancementFilter->SetHessianToMeasureFilter(objectnessFilter);
+    multiScaleEnhancementFilter->SetSigmaStepMethodToLogarithmic();
+    multiScaleEnhancementFilter->SetSigmaMinimum(sigmaMinimum);
+    multiScaleEnhancementFilter->SetSigmaMaximum(sigmaMaximum);
+    multiScaleEnhancementFilter->SetNumberOfSigmaSteps(numberOfSigmaSteps);
+    // 0 for detecting blobs
+    multiScaleEnhancementFilter->SetObjectDimension(0);
 
     // Set and configure BinaryThreshold filter. This will binarize the image
     // so that anything below threshVal will be put to 0, and anything above
     // it will be put to pixelTypeMax
+    /*
     auto thresholdFilter = itk::BinaryThresholdImageFilter<ImageType, ImageType>::New();
     thresholdFilter->SetInput(minFilter->GetOutput());
     thresholdFilter->SetOutsideValue(0);
@@ -73,6 +93,7 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     }
 
     //std::cout << pointSet << std::endl;
+    */
 
     /*
     // The image we're iterating over and it's associated iterator
@@ -116,7 +137,7 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     // Set and configure writer
     auto writer = itk::ImageFileWriter<ImageType>::New();
     writer->SetFileName(outputFile);
-    writer->SetInput(thresholdFilter->GetOutput());
+    writer->SetInput(multiScaleEnhancementFilter->GetOutput());
     writer->Update();
 
     // Print out number of labels
