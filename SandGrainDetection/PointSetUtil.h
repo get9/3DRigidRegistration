@@ -1,7 +1,9 @@
 #include <iostream>
+#include <fstream>
 #include <string>
 
 #include "itkPointSet.h"
+#include "itkTransformMeshFilter.h"
 
 
 // Writes PointSet 'points' to file named 'filename'
@@ -76,4 +78,19 @@ readFromFile(std::string filename)
     } else {
         return nullptr;
     }
+}
+
+// Transform PointSet by applying specific Transform
+// 'transform' MUST be set up before this (e.g. with your params and such)
+template <typename TElement, uint32_t TDimension, typename TTransform>
+typename itk::PointSet<TElement, TDimension>::Pointer
+applyTransform(typename itk::PointSet<TElement, TDimension>::Pointer points,
+               typename TTransform::Pointer transform)
+{
+    using TPointSet = itk::PointSet<TElement, TDimension>;
+    auto transformFilter = itk::TransformMeshFilter<TPointSet, TPointSet, TTransform>::New();
+    transformFilter->SetInput(points);
+    transformFilter->SetTransform(transform);
+    transformFilter->Update();
+    return transformFilter->GetOutput();
 }

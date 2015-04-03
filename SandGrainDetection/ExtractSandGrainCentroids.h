@@ -65,6 +65,7 @@ void extractSandGrainCentroids(const std::string inputFile, const std::string ou
     // Run pipeline
     labelMapFilter->Update();
 
+    // Change labeled regions into a PointSet
     auto pointSet = itk::PointSet<double, TDimension>::New();
     const auto labelMapFilterOutput = labelMapFilter->GetOutput();
     // XXX start at 1 because label 0 is the background object (i.e. all black)
