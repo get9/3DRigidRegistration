@@ -1,4 +1,5 @@
 #include <string>
+#include <iostream> // cout, endl, ofstream
 #include <cmath> // floor()
 #include <limits> // numeric_limits<T>::max()
 
@@ -15,16 +16,17 @@
 
 // PointSet
 #include "itkPointSet.h"
+#include "PointSetUtil.h"
 
 
-template <typename PixelType, uint32_t Dimension>
-void detectSandGrains(const std::string inputFile, const std::string outputFile,
-                      const double H, const double threshPerc)
+template <typename TPixel, uint32_t TDimension>
+void extractSandGrainCentroids(const std::string inputFile, const std::string outputFile,
+                               const double H, const double threshPerc)
 {
-    using ImageType = itk::Image<PixelType, Dimension>;
+    using ImageType = itk::Image<TPixel, TDimension>;
 
-    // The max unsigned representable value by PixelType
-    const PixelType pixelTypeMax = std::numeric_limits<PixelType>::max();
+    // The max unsigned representable value by TPixel
+    const TPixel pixelMax = std::numeric_limits<TPixel>::max();
 
     // Set and configure reader
     auto reader = itk::ImageFileReader<ImageType>::New();
@@ -34,30 +36,27 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     // param, which is a percentage (in range [0, 1]).
     // Set and configure HMinimaImageFilter
     auto convexFilter = itk::HConvexImageFilter<ImageType, ImageType>::New();
-    const PixelType hIntensityUnits = PixelType( floor(H * pixelTypeMax) );
+    const TPixel hIntensityUnits = TPixel( floor(H * pixelMax) );
     std::cout << "hIntensityUnits = " << uint32_t(hIntensityUnits) << std::endl;
     convexFilter->SetHeight(hIntensityUnits);
     convexFilter->SetInput(reader->GetOutput());
 
     // After running morphology filter, need to rescale the intensities
-    //auto rescaler = itk::RescaleIntensityImageFilter<ImageType, ImageType>::New();
-    //rescaler->SetInput(convexFilter->GetOutput());
+    auto rescaler = itk::RescaleIntensityImageFilter<ImageType, ImageType>::New();
+    rescaler->SetInput(convexFilter->GetOutput());
 
     // Set and configure BinaryThreshold filter. This will binarize the image
     // so that anything below threshVal will be put to 0, and anything above
-    // it will be put to pixelTypeMax
-    /*
+    // it will be put to pixelMax
     auto thresholdFilter = itk::BinaryThresholdImageFilter<ImageType, ImageType>::New();
     thresholdFilter->SetInput(rescaler->GetOutput());
     thresholdFilter->SetOutsideValue(0);
-    thresholdFilter->SetInsideValue(pixelTypeMax);
-    const PixelType threshVal = PixelType( floor(threshPerc * pixelTypeMax) );
+    thresholdFilter->SetInsideValue(pixelMax);
+    const TPixel threshVal = TPixel( floor(threshPerc * pixelMax) );
     std::cout << "threshVal = " << uint32_t(threshVal) << std::endl;
     thresholdFilter->SetLowerThreshold(threshVal);
-    thresholdFilter->SetUpperThreshold(pixelTypeMax);
-    */
+    thresholdFilter->SetUpperThreshold(pixelMax);
 
-    /*
     // Run binary image to label filter. This will label all the regions that
     // are non-zero (due to thresholding).
     auto labelMapFilter = itk::BinaryImageToShapeLabelMapFilter<ImageType>::New();
@@ -66,73 +65,17 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     // Run pipeline
     labelMapFilter->Update();
 
-    // Add centroids of grains to PointSet
-    // XXX start at 1 because label 0 is the background object (i.e. all black)
-    using PointSetType = itk::PointSet<PixelType, Dimension>;
-    using IteratorType = itk::ImageRegionConstIterator<ImageType>;
-    using PointType = typename PointSetType::PointType;
-
-    auto pointSet = itk::PointSet<PixelType, Dimension>::New();
+    auto pointSet = itk::PointSet<double, TDimension>::New();
     const auto labelMapFilterOutput = labelMapFilter->GetOutput();
+    // XXX start at 1 because label 0 is the background object (i.e. all black)
     for (uint32_t i = 1; i <= labelMapFilterOutput->GetNumberOfLabelObjects(); ++i) {
         const auto shapeLabelObject = labelMapFilterOutput->GetLabelObject(i);
-        std::cout << i << "\t" << shapeLabelObject->GetCentroid() << std::endl;
         pointSet->SetPoint(i - 1, shapeLabelObject->GetCentroid());
     }
 
-    //std::cout << pointSet << std::endl;
-    */
-
-    /*
-    // The image we're iterating over and it's associated iterator
-    auto image = thresholdFilter->GetOutput();
-    IteratorType it(image, image->GetRequestedRegion());
-    it.GoToBegin();
-
-    PointType point;
-    uint64_t pointID = 0;
-    auto pointSet = PointSetType::New();
-
-    // Iterate through image, only taking non-0 intensity-value pixels
-    while ( !it.IsAtEnd() ) {
-        // Only transform index to physical coords if pixel isn't black
-        // (otherwise, we don't care about it)
-        if (it.Get() != 0) {
-            // Convert pixel index into a physical point
-            image->TransformIndexToPhysicalPoint(it.GetIndex(), point);
-            std::cout << uint32_t(it.Get()) << " --> " << point << std::endl;
-            pointSet->SetPoint(pointID, point);
-            pointSet->SetPointData(pointID, it.Get());
-            ++pointID;
-        }
-        ++it;
+    // Write pointset to file
+    if (writeToFile<double, TDimension>(outputFile, pointSet) < 0) {
+        std::cerr << "[error]: could not write to file " << outputFile << std::endl;
+        exit(1);
     }
-
-    // Write PointSet to just a text file
-    auto points = pointSet->GetPoints();
-    auto iter = points->Begin();
-    while (iter != points->End()) {
-
-    }
-
-    // Segment?
-
-    // Compute bounding boxes
-
-    // Write to PCL-compatible output
-    */
-
-    // Set and configure writer
-    auto writer = itk::ImageFileWriter<ImageType>::New();
-    writer->SetFileName(outputFile);
-    writer->SetInput(convexFilter->GetOutput());
-    writer->Update();
-
-    // Print out number of labels
-    /*
-    std::cout << "There are "
-              << labelMapFilter->GetOutput()->GetNumberOfLabelObjects()
-              << " objects." << std::endl;
-    */
-
 }

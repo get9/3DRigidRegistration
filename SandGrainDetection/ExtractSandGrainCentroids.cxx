@@ -1,4 +1,4 @@
-#include "SandGrainDetector.h"
+#include "ExtractSandGrainCentroids.h"
 
 
 int main(int argc, char **argv)
@@ -39,13 +39,13 @@ int main(int argc, char **argv)
     // Run detector
     try {
         if (bitdepth == 8 && dimension == 2) {
-            detectSandGrains<uint8_t, 2>(inputFilename, outputFilename, H, threshPerc);
+            extractSandGrainCentroids<uint8_t, 2>(inputFilename, outputFilename, H, threshPerc);
         } else if (bitdepth == 16 && dimension == 2) {
-            detectSandGrains<uint16_t, 2>(inputFilename, outputFilename, H, threshPerc);
+            extractSandGrainCentroids<uint16_t, 2>(inputFilename, outputFilename, H, threshPerc);
         } else if (bitdepth == 8 && dimension == 3) {
-            detectSandGrains<uint8_t, 3>(inputFilename, outputFilename, H, threshPerc);
+            extractSandGrainCentroids<uint8_t, 3>(inputFilename, outputFilename, H, threshPerc);
         } else {
-            detectSandGrains<uint16_t, 3>(inputFilename, outputFilename, H, threshPerc);
+            extractSandGrainCentroids<uint16_t, 3>(inputFilename, outputFilename, H, threshPerc);
         }
     } catch (itk::ExceptionObject& err) {
         std::cerr << "itk::ExceptionObject caught" << std::endl;

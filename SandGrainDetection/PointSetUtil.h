@@ -6,7 +6,8 @@
 
 // Writes PointSet 'points' to file named 'filename'
 template <typename TElement, uint32_t TDimension>
-int32_t writeToFile(std::string filename, typename itk::PointSet<TElement, TDimension>::Pointer points)
+int32_t writeToFile(std::string filename,
+                    typename itk::PointSet<TElement, TDimension>::Pointer points)
 {
     // Don't need to write any points if the size is less than or equal to 0
     if (points->GetNumberOfPoints() <= 0) {
