@@ -11,6 +11,7 @@
 #include "itkHConvexImageFilter.h"
 #include "itkBinaryThresholdImageFilter.h"
 #include "itkBinaryImageToShapeLabelMapFilter.h"
+#include "itkRescaleIntensityImageFilter.h"
 
 // PointSet
 #include "itkPointSet.h"
@@ -32,24 +33,31 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     // For the following filters, the parameter is configured with the input
     // param, which is a percentage (in range [0, 1]).
     // Set and configure HMinimaImageFilter
-    auto minFilter = itk::HConvexImageFilter<ImageType, ImageType>::New();
+    auto convexFilter = itk::HConvexImageFilter<ImageType, ImageType>::New();
     const PixelType hIntensityUnits = PixelType( floor(H * pixelTypeMax) );
     std::cout << "hIntensityUnits = " << uint32_t(hIntensityUnits) << std::endl;
-    minFilter->SetHeight(hIntensityUnits);
-    minFilter->SetInput(reader->GetOutput());
+    convexFilter->SetHeight(hIntensityUnits);
+    convexFilter->SetInput(reader->GetOutput());
+
+    // After running morphology filter, need to rescale the intensities
+    //auto rescaler = itk::RescaleIntensityImageFilter<ImageType, ImageType>::New();
+    //rescaler->SetInput(convexFilter->GetOutput());
 
     // Set and configure BinaryThreshold filter. This will binarize the image
     // so that anything below threshVal will be put to 0, and anything above
     // it will be put to pixelTypeMax
+    /*
     auto thresholdFilter = itk::BinaryThresholdImageFilter<ImageType, ImageType>::New();
-    thresholdFilter->SetInput(minFilter->GetOutput());
+    thresholdFilter->SetInput(rescaler->GetOutput());
     thresholdFilter->SetOutsideValue(0);
     thresholdFilter->SetInsideValue(pixelTypeMax);
     const PixelType threshVal = PixelType( floor(threshPerc * pixelTypeMax) );
     std::cout << "threshVal = " << uint32_t(threshVal) << std::endl;
     thresholdFilter->SetLowerThreshold(threshVal);
     thresholdFilter->SetUpperThreshold(pixelTypeMax);
+    */
 
+    /*
     // Run binary image to label filter. This will label all the regions that
     // are non-zero (due to thresholding).
     auto labelMapFilter = itk::BinaryImageToShapeLabelMapFilter<ImageType>::New();
@@ -73,6 +81,7 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     }
 
     //std::cout << pointSet << std::endl;
+    */
 
     /*
     // The image we're iterating over and it's associated iterator
@@ -116,12 +125,14 @@ void detectSandGrains(const std::string inputFile, const std::string outputFile,
     // Set and configure writer
     auto writer = itk::ImageFileWriter<ImageType>::New();
     writer->SetFileName(outputFile);
-    writer->SetInput(thresholdFilter->GetOutput());
+    writer->SetInput(convexFilter->GetOutput());
     writer->Update();
 
     // Print out number of labels
+    /*
     std::cout << "There are "
               << labelMapFilter->GetOutput()->GetNumberOfLabelObjects()
               << " objects." << std::endl;
+    */
 
 }
