@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 
+#include "itkMesh.h"
 #include "itkPointSet.h"
 #include "itkTransformMeshFilter.h"
 
@@ -80,6 +81,30 @@ readFromFile(std::string filename)
     }
 }
 
+template <typename TElement, uint32_t TDimension>
+typename itk::Mesh<TElement, TDimension>::Pointer
+pointSet2Mesh(typename itk::PointSet<TElement, TDimension>::Pointer points)
+{
+    auto mesh = itk::Mesh<TElement, TDimension>::New();
+    for (auto i = 0; i < points->GetNumberOfPoints(); ++i) {
+        mesh->SetPoint(i, points->GetPoint(i));
+    }
+    return mesh;
+}
+
+template <typename TElement, uint32_t TDimension>
+typename itk::PointSet<TElement, TDimension>::Pointer
+mesh2PointSet(typename itk::Mesh<TElement, TDimension>::Pointer points)
+{
+    auto pointSet = itk::PointSet<TElement, TDimension>::New();
+    for (auto i = 0; i < points->GetNumberOfPoints(); ++i) {
+        pointSet->SetPoint(i, points->GetPoint(i));
+    }
+    return pointSet;
+}
+
+
+
 // Transform PointSet by applying specific Transform
 // 'transform' MUST be set up before this (e.g. with your params and such)
 template <typename TElement, uint32_t TDimension, typename TTransform>
@@ -87,10 +112,25 @@ typename itk::PointSet<TElement, TDimension>::Pointer
 applyTransform(typename itk::PointSet<TElement, TDimension>::Pointer points,
                typename TTransform::Pointer transform)
 {
-    using TPointSet = itk::PointSet<TElement, TDimension>;
-    auto transformFilter = itk::TransformMeshFilter<TPointSet, TPointSet, TTransform>::New();
-    transformFilter->SetInput(points);
+    // Need to convert to mesh first to do transformation
+    auto mesh = pointSet2Mesh<TElement, TDimension>(points);
+
+    // Create transform
+    using TMesh = itk::Mesh<TElement, TDimension>;
+    auto transformFilter = itk::TransformMeshFilter<TMesh, TMesh, TTransform>::New();
+    transformFilter->SetInput(mesh);
     transformFilter->SetTransform(transform);
-    transformFilter->Update();
-    return transformFilter->GetOutput();
+
+    // Run transform
+    try {
+        transformFilter->Update();
+    } catch (itk::ExceptionObject& ex) {
+        std::cerr << "[error]: itk::ExceptionObject caught" << std::endl;
+        std::cerr << ex << std::endl;
+        exit(1);
+    }
+
+    // Convert back to PointSet
+    auto transformedPoints = mesh2PointSet<TElement, TDimension>(transformFilter->GetOutput());
+    return transformedPoints;
 }

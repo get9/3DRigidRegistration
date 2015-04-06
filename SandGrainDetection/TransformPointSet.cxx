@@ -1,6 +1,7 @@
 #include <iostream>
 #include "PointSetUtil.h"
 #include "itkTranslationTransform.h"
+#include "itkTransformMeshFilter.h"
 
 
 template <uint32_t TDimension>
@@ -15,21 +16,19 @@ void doApplyTransform(std::string infile, std::string outfile)
     auto transform = TTransform::New();
     typename TTransform::OutputVectorType displacement;
     displacement[0] = 1.0;
-    displacement[1] = 0.0;
+    for (auto i = 1; i < TDimension; ++i) {
+        displacement[i] = 0.0;
+    }
     transform->Translate(displacement);
 
     // Read PointSet from file
     auto points = readFromFile<double, TDimension>(infile);
 
     // Apply transform
-    try {
-        auto transformedPoints = applyTransform<double, TDimension, TTransform>(points, transform);
-        writeToFile<double, TDimension>(outfile, transformedPoints);
-    } catch (itk::ExceptionObject& err) {
-        std::cerr << "[error]: itk::ExceptionObject caught" << std::endl;
-        std::cerr << err << std::endl;
-        exit(1);
-    }
+    auto transformedPoints = applyTransform<double, TDimension, TTransform>(points, transform);
+
+    // Write back to file
+    writeToFile<double, TDimension>(outfile, transformedPoints);
 }
 
 int main(int argc, char** argv)
