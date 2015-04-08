@@ -1,9 +1,10 @@
 // Registration stuff
 #include "itkImageRegistrationMethodv4.h"
 #include "itkMeanSquaresImageToImageMetricv4.h"
-#include "itkVersorRigid3DTransform.h"
-#include "itkCenteredTransformInitializer.h"
+#include "itkSimilarity3DTransform.h"
 #include "itkRegularStepGradientDescentOptimizerv4.h"
+#include "itkLinearInterpolateImageFunction.h"
+#include "itkCenteredTransformInitializer.h"
 
 // Needed for I/O
 #include "itkImageFileReader.h"
@@ -17,29 +18,32 @@
 // For the observer class
 #include "itkCommand.h"
 
+// Only working with 3D data
+const auto TDimension = 3;
 
-// Only working with volumes (3D)
-const unsigned int Dimension = 3;
+// Pixel types. Externally, they are of type TPixel. Internally, they are of type TInternalPixel
+using TPixel         = uint8_t;
+using TInternalPixel = double;
 
-// Some typedefs to make things easier
-typedef float PixelType;
-typedef itk::Image<PixelType, Dimension> FixedImageType;
-typedef itk::Image<PixelType, Dimension> MovingImageType;
-typedef itk::VersorRigid3DTransform<double> TransformType;
-typedef itk::RegularStepGradientDescentOptimizerv4<double> OptimizerType;
-typedef itk::MeanSquaresImageToImageMetricv4<FixedImageType, MovingImageType> MetricType;
-typedef itk::ImageRegistrationMethodv4<FixedImageType, MovingImageType, TransformType> RegistrationType;
-typedef itk::ImageFileReader<FixedImageType> FixedImageReaderType;
-typedef itk::ImageFileReader<MovingImageType> MovingImageReaderType;
-typedef itk::CenteredTransformInitializer<TransformType, FixedImageType, MovingImageType> TransformInitializerType;
-typedef TransformType::VersorType VersorType;
-typedef VersorType::VectorType VectorType;
-typedef OptimizerType::ScalesType OptimizerScalesType;
-typedef itk::ResampleImageFilter<MovingImageType, FixedImageType> ResampleFilterType;
-typedef uint16_t OutputPixelType;
-typedef itk::Image<OutputPixelType, Dimension> OutputImageType;
-typedef itk::CastImageFilter<FixedImageType, OutputImageType> CastFilterType;
-typedef itk::ImageFileWriter<OutputImageType> WriterType;
+// Image types
+using TFixedImage    = itk::Image<TPixel, TDimension>;
+using TMovingImage   = itk::Image<TPixel, TDimension>;
+using TInternalImage = itk::Image<TInternalPixel, TDimension>;
+
+// Casters (to go from external to internal representation)
+using TFixedCastFilter  = itk::CastImageFilter<TFixedImage, TInternalImage>;
+using TMovingCastFilter = itk::CastImageFilter<TMovingImage, TInternalImage>;
+
+// Registration stuff
+using TTransform            = itk::Similarity3DTransform<TInternalPixel>;
+using TOptimizer            = itk::RegularStepGradientDescentOptimizerv4<TInternalPixel>;
+using TRegistration         = itk::ImageRegistrationMethodv4<TInternalImage, TInternalImage, TTransform>;
+using TMetric               = itk::MeanSquaresImageToImageMetricv4<TInternalImage, TInternalImage>;
+using TTransformInitializer = itk::CenteredTransformInitializer<TTransform, TInternalImage, TInternalImage>;
+
+// Readers
+using TFixedReader  = itk::ImageFileReader<TFixedImage>;
+using TMovingReader = itk::ImageFileReader<TMovingImage>;
 
 // The observer class that will print out intermediate info of the optimizer
 class CommandIterationUpdate : public itk::Command
@@ -54,7 +58,7 @@ class CommandIterationUpdate : public itk::Command
         CommandIterationUpdate() {};
     
     public:
-        typedef itk::RegularStepGradientDescentOptimizerv4<double> OptimizerType;
+        typedef itk::RegularStepGradientDescentOptimizerv4<TInternalPixel> OptimizerType;
         typedef const OptimizerType* OptimizerPointer;
         void Execute(itk::Object* caller, const itk::EventObject & event)
         {

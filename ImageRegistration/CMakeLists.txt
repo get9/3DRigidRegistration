@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.0)
 project(ImageRegistration)
 
 find_package(ITK REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -std=c++11")
 set(CMAKE_BUILD_TYPE "Release")
 
 add_executable(register VolumeRegistration.cxx )

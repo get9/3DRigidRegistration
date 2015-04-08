@@ -2,55 +2,65 @@
 #include "VolumeRegistration.h"
 
 
-int main( int argc, char *argv[] )
+int main(int argc, char *argv[])
 {
-    if( argc < 4 ) {
-        printHelp(argv[0]);
+    if(argc < 3) {
+        std::cerr << "Missing Parameters " << std::endl;
+        std::cerr << "Usage: " << std::endl;
+        std::cerr << "    " << argv[0]
+                  << " fixedImageFile movingImageFile" << std::endl; 
         return EXIT_FAILURE;
     }
+    
+    auto transform    = TTransform::New();
+    auto optimizer    = TOptimizer::New();
+    auto registration = TRegistration::New();
+    auto metric       = TMetric::New();
+    auto fixedReader  = TFixedReader::New();
+    auto movingReader = TMovingReader::New();
 
-    // Instantiate Transform, Optimizer, Metric, and Registration objects
-    MetricType::Pointer metric = MetricType::New();
-    OptimizerType::Pointer optimizer = OptimizerType::New();
-    RegistrationType::Pointer registration = RegistrationType::New();
-    registration->SetMetric(metric);
-    registration->SetOptimizer(optimizer);
-    TransformType::Pointer initialTransform = TransformType::New();
+    // Parse arguments
+    auto fixedFilename  = std::string(argv[1]);
+    auto movingFilename = std::string(argv[2]);
 
-    // Read in images, set them to fixed and moving images respectively
-    FixedImageReaderType::Pointer fixedImageReader = FixedImageReaderType::New();
-    MovingImageReaderType::Pointer movingImageReader = MovingImageReaderType::New();
-    fixedImageReader->SetFileName(argv[1]);
-    movingImageReader->SetFileName(argv[2]);
-    registration->SetFixedImage(fixedImageReader->GetOutput());
-    registration->SetMovingImage(movingImageReader->GetOutput());
+    // Read in data
+    fixedReader->SetFileName(fixedFilename);
+    movingReader->SetFileName(movingFilename);
 
-    // Sets the initializer and initializes it
-    TransformInitializerType::Pointer initializer = TransformInitializerType::New();
-    initializer->SetTransform(initialTransform);
-    initializer->SetFixedImage(fixedImageReader->GetOutput());
-    initializer->SetMovingImage(movingImageReader->GetOutput());
-    // Uses geometric centers. Other option is MomentsOn(), but that takes
-    // forever.
+    // Need to convert images to internal types (floats) first
+    auto fixedCaster  = TFixedCastFilter::New();
+    auto movingCaster = TFixedCastFilter::New();
+    fixedCaster->SetInput(fixedReader->GetOutput());
+    movingCaster->SetInput(movingReader->GetOutput());
+
+    // Set up transform initializer
+    auto initializer = TTransformInitializer::New();
+    initializer->SetTransform(transform);
+    initializer->SetFixedImage(fixedCaster->GetOutput());
+    initializer->SetMovingImage(movingCaster->GetOutput());
     initializer->GeometryOn();
     initializer->InitializeTransform();
 
-    initialTransform->SetIdentity();
-
-    // Initialize the transform parameters
-    VersorType rotation;
-    VectorType axis;
+    // Set up transform with good first guess parameters
+    TTransform::VersorType rotation;
+    TTransform::VectorType axis;
     axis[0] = 0.0;
     axis[1] = 0.0;
     axis[2] = 1.0;
     const double angle = 0;
     rotation.Set(axis, angle);
-    initialTransform->SetRotation(rotation);
+    transform->SetRotation(rotation);
+    transform->SetScale(1.0);
 
-    registration->SetInitialTransform(initialTransform);
+    // Connect all components
+    registration->SetOptimizer(optimizer);
+    registration->SetMetric(metric);
+    registration->SetInitialTransform(transform);
+    registration->SetFixedImage(fixedCaster->GetOutput());
+    registration->SetMovingImage(movingCaster->GetOutput());
 
     // Configure the Optimizer
-    OptimizerScalesType optimizerScales(initialTransform->GetNumberOfParameters());
+    TOptimizer::ScalesType optimizerScales(transform->GetNumberOfParameters());
     const double translationScale = 1.0 / 1000.0;
     optimizerScales[0] = 1.0;
     optimizerScales[1] = 1.0;
@@ -58,64 +68,56 @@ int main( int argc, char *argv[] )
     optimizerScales[3] = translationScale;
     optimizerScales[4] = translationScale;
     optimizerScales[5] = translationScale;
+    optimizerScales[6] = 1.0;
+    optimizer->SetMinimumStepLength(0.001);
     optimizer->SetScales(optimizerScales);
     optimizer->SetNumberOfIterations(200);
     optimizer->SetLearningRate(0.2);
-    // "At what point do we not care about continuing registration?" (in mm)
-    // Otherwise known as stop threshold
-    optimizer->SetMinimumStepLength(0.001);
-    // While optimizer is testing points, it may have found a good point, but
-    // then tests another one. The last value is not necessarily the best one.
-    // If we found another value, keep the best one.
     optimizer->SetReturnBestParametersAndValue(true);
-    // Create the command observer and hook it to the optimizer
+
     CommandIterationUpdate::Pointer observer = CommandIterationUpdate::New();
     optimizer->AddObserver(itk::IterationEvent(), observer);
 
-    // Set up level registration (just use 1 level right now)
-    const unsigned int numberOfLevels = 1;
-    RegistrationType::ShrinkFactorsArrayType shrinkFactorsPerLevel;
+    // Set levels of registration
+    const auto numberOfLevels = 1;
+    TRegistration::ShrinkFactorsArrayType shrinkFactorsPerLevel;
     shrinkFactorsPerLevel.SetSize(1);
     shrinkFactorsPerLevel[0] = 1;
-    // Need to smooth the image before you subsample it
-    RegistrationType::SmoothingSigmasArrayType smoothingSigmasPerLevel;
+    TRegistration::SmoothingSigmasArrayType smoothingSigmasPerLevel;
     smoothingSigmasPerLevel.SetSize(1);
     smoothingSigmasPerLevel[0] = 0;
-    // Parameters of the pyramid scheme
     registration->SetNumberOfLevels(numberOfLevels);
     registration->SetSmoothingSigmasPerLevel(smoothingSigmasPerLevel);
     registration->SetShrinkFactorsPerLevel(shrinkFactorsPerLevel);
 
-    // Run the registration
     try {
-        // Run the registration
         registration->Update();
         std::cout << "Optimizer stop condition: "
-                  << registration->GetOptimizer()->GetStopConditionDescription()
-                  << std::endl;
-    }
-    catch(itk::ExceptionObject& err) {
-        std::cerr << "ExceptionObject caught !" << std::endl;
-        std::cerr << err << std::endl;
+                            << registration->GetOptimizer()->GetStopConditionDescription()
+                            << std::endl;
+    } catch(itk::ExceptionObject& err) {
+        std::cout << "ExceptionObject caught!" << std::endl;
+        std::cout << err << std::endl;
         return EXIT_FAILURE;
     }
-
+    
     // Print out final parameters
-    const TransformType::ParametersType finalParameters = registration->GetOutput()->Get()->GetParameters();
+    auto finalParameters = registration->GetOutput()->Get()->GetParameters();
     std::cout << std::endl << std::endl;
     std::cout << "Result = " << std::endl;
-    std::cout << " versor X      = " << finalParameters[0] << std::endl;
-    std::cout << " versor Y      = " << finalParameters[1] << std::endl;
-    std::cout << " versor Z      = " << finalParameters[2] << std::endl;
-    std::cout << " Translation X = " << finalParameters[3]  << std::endl;
-    std::cout << " Translation Y = " << finalParameters[4]  << std::endl;
-    std::cout << " Translation Z = " << finalParameters[5]  << std::endl;
-    std::cout << " Iterations    = " << optimizer->GetCurrentIteration() << std::endl;
-    std::cout << " Metric value  = " << optimizer->GetValue() << std::endl;
+    std::cout << " versor X        = " << finalParameters[0] << std::endl;
+    std::cout << " versor Y        = " << finalParameters[1] << std::endl;
+    std::cout << " versor Z        = " << finalParameters[2] << std::endl;
+    std::cout << " Translation X   = " << finalParameters[3]  << std::endl;
+    std::cout << " Translation Y   = " << finalParameters[4]  << std::endl;
+    std::cout << " Translation Z   = " << finalParameters[5]  << std::endl;
+    std::cout << " Isotropic Scale = " << finalParameters[6]  << std::endl;
+    std::cout << " Iterations      = " << optimizer->GetCurrentIteration() << std::endl;
+    std::cout << " Metric value    = " << optimizer->GetValue() << std::endl;
     std::cout << std::endl;
 
     // Print out transformation matrix
-    TransformType::Pointer finalTransform = TransformType::New();
+    auto finalTransform = TTransform::New();
     finalTransform->SetFixedParameters(registration->GetOutput()->Get()->GetFixedParameters());
     finalTransform->SetParameters(finalParameters);
     std::cout << "Matrix = " << std::endl << finalTransform->GetMatrix() << std::endl;
@@ -123,6 +125,7 @@ int main( int argc, char *argv[] )
 
     // Write the registered image out to a file so we can look at it and visually compare
     // 1. Apply transform to the fixed image to make it look like the moving image
+    /*
     ResampleFilterType::Pointer resampler = ResampleFilterType::New();
     resampler->SetTransform(finalTransform);
     resampler->SetInput(movingImageReader->GetOutput());
@@ -148,13 +151,7 @@ int main( int argc, char *argv[] )
         std::cerr << err << std::endl;
         return EXIT_FAILURE;
     }
+    */
 
     return EXIT_SUCCESS;
-}
-
-void printHelp(char* programName)
-{
-    std::cerr << "Missing Parameters " << std::endl;
-    std::cerr << "Usage:" << std::endl;
-    std::cerr << programName << " fixedImageFile movingImageFile outputImageFile" << std::endl;
 }
