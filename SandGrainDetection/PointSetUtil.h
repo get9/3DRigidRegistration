@@ -8,9 +8,9 @@
 
 
 // Writes PointSet 'points' to file named 'filename'
-template <typename TElement, uint32_t TDimension>
-int32_t writeToFile(std::string filename,
-                    typename itk::PointSet<TElement, TDimension>::Pointer points)
+template <typename TElement, const uint32_t TDimension>
+const int32_t writeToFile(const std::string filename,
+                          const typename itk::PointSet<TElement, TDimension>::Pointer points)
 {
     // Don't need to write any points if the size is less than or equal to 0
     if (points->GetNumberOfPoints() <= 0) {
@@ -47,8 +47,8 @@ int32_t writeToFile(std::string filename,
 
 // Read PointSet from file named 'filename' and return pointer to it
 template <typename TElement, uint32_t TDimension>
-typename itk::PointSet<TElement, TDimension>::Pointer
-readFromFile(std::string filename)
+const typename itk::PointSet<TElement, TDimension>::Pointer
+readFromFile(const std::string filename)
 {
     std::ifstream pointsFile(filename, std::ios::in);
     if (pointsFile.is_open()) {
@@ -83,7 +83,7 @@ readFromFile(std::string filename)
 
 template <typename TElement, uint32_t TDimension>
 typename itk::Mesh<TElement, TDimension>::Pointer
-pointSet2Mesh(typename itk::PointSet<TElement, TDimension>::Pointer points)
+pointSet2Mesh(const typename itk::PointSet<TElement, TDimension>::Pointer points)
 {
     auto mesh = itk::Mesh<TElement, TDimension>::New();
     for (auto i = 0; i < points->GetNumberOfPoints(); ++i) {
@@ -94,7 +94,7 @@ pointSet2Mesh(typename itk::PointSet<TElement, TDimension>::Pointer points)
 
 template <typename TElement, uint32_t TDimension>
 typename itk::PointSet<TElement, TDimension>::Pointer
-mesh2PointSet(typename itk::Mesh<TElement, TDimension>::Pointer points)
+mesh2PointSet(const typename itk::Mesh<TElement, TDimension>::Pointer points)
 {
     auto pointSet = itk::PointSet<TElement, TDimension>::New();
     for (auto i = 0; i < points->GetNumberOfPoints(); ++i) {
@@ -109,8 +109,8 @@ mesh2PointSet(typename itk::Mesh<TElement, TDimension>::Pointer points)
 // 'transform' MUST be set up before this (e.g. with your params and such)
 template <typename TElement, uint32_t TDimension, typename TTransform>
 typename itk::PointSet<TElement, TDimension>::Pointer
-applyTransform(typename itk::PointSet<TElement, TDimension>::Pointer points,
-               typename TTransform::Pointer transform)
+applyTransform(const typename itk::PointSet<TElement, TDimension>::Pointer points,
+               const typename TTransform::Pointer transform)
 {
     // Need to convert to mesh first to do transformation
     auto mesh = pointSet2Mesh<TElement, TDimension>(points);

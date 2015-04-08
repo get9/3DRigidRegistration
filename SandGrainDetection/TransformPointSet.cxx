@@ -4,12 +4,20 @@
 #include "itkTransformMeshFilter.h"
 
 
-inline double deg2rad(double deg) {
+const uint32_t TDimension = 3;
+
+inline const double deg2rad(const double deg) {
     return (deg * M_PI / 180.0);
 }
 
-template <uint32_t TDimension>
-void doApplyTransform(std::string infile, std::string outfile)
+struct TranslateVector {
+    double x;
+    double y;
+    double z;
+};
+
+void doApplyTransform(std::string infile, std::string outfile, const double rotateDegree,
+                      TranslateVector v, double scale)
 {
     // Helpful aliases
     using TPointSet = itk::PointSet<double, TDimension>;
@@ -22,17 +30,19 @@ void doApplyTransform(std::string infile, std::string outfile)
     // Set up transform
     auto transform = TTransform::New();
     TOutputVector translate;
-    translate[0] = 1.5;
-    translate[1] = 1.5;
+    translate[0] = v.x;
+    translate[1] = v.y;
+    translate[2] = v.z;
     transform->Translate(translate);
     TVector axis;
     TVersor rotation;
     axis[0] = 0.0;
     axis[1] = 0.0;
     axis[2] = 1.0;
-    const double angle = deg2rad(30.0);
+    const double angle = deg2rad(rotateDegree);
     rotation.Set(axis, angle);
     transform->SetRotation(rotation);
+    transform->SetScale(scale);
 
     // Read PointSet from file
     auto points = readFromFile<double, TDimension>(infile);
@@ -46,28 +56,22 @@ void doApplyTransform(std::string infile, std::string outfile)
 
 int main(int argc, char** argv)
 {
-    if (argc < 4) {
+    if (argc < 8) {
         std::cerr << "Usage:" << std::endl;
-        std::cerr << "    " << argv[0] << " infile outfile dim" << std::endl;
+        std::cerr << "    " << argv[0] << " infile outfile rot tx ty tz scale" << std::endl;
         exit(1);
     }
 
     // Parse/validate input args
-    const auto infile = std::string(argv[1]);
-    const auto outfile = std::string(argv[2]);
-    const uint32_t dimension = std::stoi(argv[3]);
-    if (dimension != 2 && dimension != 3) {
-        std::cerr << "[error]: dimension must be one of {2, 3}" << std::endl;
-        return EXIT_FAILURE;
-    }
+    const auto infile     = std::string(argv[1]);
+    const auto outfile    = std::string(argv[2]);
+    const auto degrees    = std::stod(argv[3]);
+    const auto translateX = std::stod(argv[4]);
+    const auto translateY = std::stod(argv[5]);
+    const auto translateZ = std::stod(argv[6]);
+    const auto scale      = std::stod(argv[7]);
 
-    // Call proper function based on bitdepth/dimension
-    /*
-    if (dimension == 2) {
-        doApplyTransform<2>(infile, outfile);
-    } else {
-        doApplyTransform<3>(infile, outfile);
-    }
-    */
-    doApplyTransform<3>(infile, outfile);
+    TranslateVector v = { translateX, translateY, translateZ };
+
+    doApplyTransform(infile, outfile, degrees, v, scale);
 }
