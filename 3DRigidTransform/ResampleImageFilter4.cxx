@@ -6,7 +6,7 @@
 #include "itkImageFileReader.h"
 #include "itkImageFileWriter.h"
 #include "itkResampleImageFilter.h"
-#include "itkVersorRigid3DTransform.h"
+#include "itkSimilarity3DTransform.h"
 
 inline double deg2rad(double angle)
 {
@@ -42,7 +42,7 @@ int main( int argc, char * argv[] )
     typedef itk::ResampleImageFilter<InputImageType, OutputImageType>    FilterType;
     FilterType::Pointer filter = FilterType::New();
 
-    typedef itk::VersorRigid3DTransform<double> TransformType;
+    typedef itk::Similarity3DTransform<double> TransformType;
     TransformType::Pointer transform = TransformType::New();
 
     typedef itk::LinearInterpolateImageFunction<InputImageType, double> InterpolatorType;
