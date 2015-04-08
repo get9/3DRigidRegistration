@@ -1,8 +1,12 @@
 #include <iostream>
 #include "PointSetUtil.h"
-#include "itkTranslationTransform.h"
+#include "itkSimilarity3DTransform.h"
 #include "itkTransformMeshFilter.h"
 
+
+inline double deg2rad(double deg) {
+    return (deg * M_PI / 180.0);
+}
 
 template <uint32_t TDimension>
 void doApplyTransform(std::string infile, std::string outfile)
@@ -10,16 +14,25 @@ void doApplyTransform(std::string infile, std::string outfile)
     // Helpful aliases
     using TPointSet = itk::PointSet<double, TDimension>;
     using TPoint = typename TPointSet::PointType;
-    using TTransform = itk::TranslationTransform<typename TPoint::CoordRepType, TDimension>;
+    using TTransform = itk::Similarity3DTransform<double>;
+    using TOutputVector = typename TTransform::OutputVectorType;
+    using TVersor = typename TTransform::VersorType;
+    using TVector = typename TTransform::VectorType;
 
     // Set up transform
     auto transform = TTransform::New();
-    typename TTransform::OutputVectorType displacement;
-    displacement[0] = 1.0;
-    for (auto i = 1; i < TDimension; ++i) {
-        displacement[i] = 0.0;
-    }
-    transform->Translate(displacement);
+    TOutputVector translate;
+    translate[0] = 1.5;
+    translate[1] = 1.5;
+    transform->Translate(translate);
+    TVector axis;
+    TVersor rotation;
+    axis[0] = 0.0;
+    axis[1] = 0.0;
+    axis[2] = 1.0;
+    const double angle = deg2rad(30.0);
+    rotation.Set(axis, angle);
+    transform->SetRotation(rotation);
 
     // Read PointSet from file
     auto points = readFromFile<double, TDimension>(infile);
@@ -49,9 +62,12 @@ int main(int argc, char** argv)
     }
 
     // Call proper function based on bitdepth/dimension
+    /*
     if (dimension == 2) {
         doApplyTransform<2>(infile, outfile);
     } else {
         doApplyTransform<3>(infile, outfile);
     }
+    */
+    doApplyTransform<3>(infile, outfile);
 }
