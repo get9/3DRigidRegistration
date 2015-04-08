@@ -9,6 +9,8 @@
 #include "itkRescaleIntensityImageFilter.h"
 #include <itkAdaptiveHistogramEqualizationImageFilter.h>
 #include "itkBinaryThresholdImageFilter.h"
+#include <itkAnnulusOperator.h>
+#include <itkNeighborhoodOperatorImageFilter.h>
 
 const unsigned int Dimension = 2;
 using PixelType = uint16_t;
@@ -33,19 +35,46 @@ int main( int argc, char * argv[] )
     auto reader = itk::ImageFileReader<ImageType>::New();
     reader->SetFileName(inputFilename);
 
-    //auto rescaler = itk::RescaleIntensityImageFilter<ImageType, ImageType>::New();
-    //rescaler->SetInput(reader->GetOutput());
+    /*
+     * Rescale intensities
+     */
+    auto rescaler = itk::RescaleIntensityImageFilter<ImageType, ImageType>::New();
+    rescaler->SetInput(reader->GetOutput());
 
+    /*
+     * Sigmoid Filter
+     */
     // Pass through sigmoid filter
     auto sigmoidFilter = itk::SigmoidImageFilter<ImageType, ImageType>::New();
     sigmoidFilter->SetInput(reader->GetOutput());
     sigmoidFilter->SetAlpha(alpha);
     sigmoidFilter->SetBeta(beta);
 
-    // Binary threshold
-    auto pixelMin = std::numeric_limits<PixelType>::min();
-    auto pixelMax = std::numeric_limits<PixelType>::max();
-    auto thresholdFilter = itk::BinaryThresholdImageFilter<ImageType, ImageType>::New();
+    /*
+     * Convolution
+     */
+    // Set up Annulus Operator as convolution kernel
+    using OperatorType = itk::AnnulusOperator<PixelType, Dimension>;
+    auto annulusOperator = OperatorType();
+    annulusOperator.NormalizeOff();
+    annulusOperator.SetInnerRadius(0.0);
+    annulusOperator.SetThickness(5.0);
+    annulusOperator.SetExteriorValue(0);
+    annulusOperator.SetAnnulusValue(1);
+    annulusOperator.SetInteriorValue(0);
+    annulusOperator.CreateOperator();
+
+    // Convolution
+    using ConvolutionFilterType = itk::NeighborhoodOperatorImageFilter<ImageType, ImageType>;
+    auto convolutionFilter = ConvolutionFilterType::New();
+    convolutionFilter->SetInput(sigmoidFilter->GetOutput());
+    convolutionFilter->SetOperator(annulusOperator);
+    
+    /*
+     * Binary thresholding
+    const auto pixelMin = std::numeric_limits<PixelType>::min();
+    const auto pixelMax = std::numeric_limits<PixelType>::max();
+    const auto thresholdFilter = itk::BinaryThresholdImageFilter<ImageType, ImageType>::New();
     thresholdFilter->SetInput(sigmoidFilter->GetOutput());
     thresholdFilter->SetOutsideValue(pixelMin);
     thresholdFilter->SetInsideValue(pixelMax);
@@ -53,6 +82,7 @@ int main( int argc, char * argv[] )
     std::cout << "threshVal = " << uint32_t(threshVal) << std::endl;
     thresholdFilter->SetLowerThreshold(threshVal);
     thresholdFilter->SetUpperThreshold(pixelMax);
+     */
 
     // Adaptive Histogram Equalization
     /*
@@ -63,14 +93,7 @@ int main( int argc, char * argv[] )
     equalizer->SetRadius(radius);
     */
 
-    // Rescale the intensities
     /*
-    auto rescaler = itk::RescaleIntensityImageFilter<ImageType, ImageType>::New();
-    auto maxValue = std::numeric_limits<PixelType>::max();
-    rescaler->SetInput(equalizer->GetOutput());
-    //rescaler->SetOutputMinimum(0);
-    //rescaler->SetOutputMaximum(maxValue);
-
     auto shiftScaleFilter = itk::ShiftScaleImageFilter<ImageType, ImageType>::New();
     auto maxValue = std::numeric_limits<PixelType>::max();
     auto windowMinimum = PixelType( floor(0.02 * maxValue) );
@@ -91,7 +114,7 @@ int main( int argc, char * argv[] )
     */
 
     auto writer = itk::ImageFileWriter<ImageType>::New();
-    writer->SetInput(thresholdFilter->GetOutput());
+    writer->SetInput(convolutionFilter->GetOutput());
     writer->SetFileName(outputFilename);
 
     try {
