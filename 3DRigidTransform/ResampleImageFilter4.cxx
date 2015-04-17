@@ -1,12 +1,13 @@
 #include <string>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 
 #include "itkImage.h"
 #include "itkImageFileReader.h"
 #include "itkImageFileWriter.h"
-#include "itkResampleImageFilter.h"
-#include "itkSimilarity3DTransform.h"
+#include "itkPasteImageFilter.h"
+#include "itkSubtractImageFilter.h"
 
 inline double deg2rad(double angle)
 {
@@ -17,97 +18,69 @@ int main( int argc, char * argv[] )
 {
     if( argc < 4 ) {
         std::cerr << "Usage: " << std::endl;
-        std::cerr << argv[0] << " input output rot" << std::endl;
+        std::cerr << argv[0] << " fixed moving newimage tmpimage" << std::endl;
         return EXIT_FAILURE;
     }
 
-    const   unsigned int  Dimension = 3;
-    typedef unsigned char InputPixelType;
-    typedef unsigned char OutputPixelType;
-    typedef double        InternalPixeltype;
+    const uint32_t Dimension = 3;
+    using TPixel = uint8_t;
+    using TImage = itk::Image<TPixel, Dimension>;
 
-    typedef itk::Image<InputPixelType,  Dimension> InputImageType;
-    typedef itk::Image<OutputPixelType, Dimension> OutputImageType;
+    // Read args
+    const auto fixedFilename  = std::string(argv[1]);
+    const auto movingFilename = std::string(argv[2]);
+    const auto outputFilename = std::string(argv[3]);
+    const auto tmpFilename    = std::string(argv[4]);
 
-    // Set up reader/writer
-    typedef itk::ImageFileReader<InputImageType> ReaderType;
-    typedef itk::ImageFileWriter<OutputImageType> WriterType;
-    ReaderType::Pointer reader = ReaderType::New();
-    WriterType::Pointer writer = WriterType::New();
-    reader->SetFileName( argv[1] );
-    writer->SetFileName( argv[2] );
+    // Set up reader
+    auto fixedReader  = itk::ImageFileReader<TImage>::New();
+    fixedReader->SetFileName(fixedFilename);
+    auto movingReader = itk::ImageFileReader<TImage>::New();
+    movingReader->SetFileName(movingFilename);
 
-    const double angleInDegrees = atof( argv[3] );
+    // Get parameters of new image to construct and make it
+    fixedReader->Update();
+    auto newImageSize = fixedReader->GetOutput()->GetLargestPossibleRegion().GetSize();
+    auto newImage = itk::Image<TPixel, Dimension>::New();
+    TImage::IndexType origin;
+    origin.Fill(0);
+    TImage::RegionType region(origin, newImageSize);
+    newImage->SetRegions(region);
+    newImage->Allocate();
 
-    typedef itk::ResampleImageFilter<InputImageType, OutputImageType>    FilterType;
-    FilterType::Pointer filter = FilterType::New();
+    // Configure region where we will paste it
+    movingReader->Update();
+    fixedReader->Update();
+    auto movingSize = movingReader->GetOutput()->GetLargestPossibleRegion().GetSize();
+    auto fixedSize = fixedReader->GetOutput()->GetLargestPossibleRegion().GetSize();
+    TImage::IndexType start;
+    start[0] = uint32_t(floor((fixedSize[0] * 0.45 - movingSize[0]/2)));
+    start[1] = uint32_t(floor((fixedSize[1] * 0.55 - movingSize[1]/2)));
+    start[2] = 107;
 
-    typedef itk::Similarity3DTransform<double> TransformType;
-    TransformType::Pointer transform = TransformType::New();
+    // Paste image region onto new image
+    auto pasteFilter = itk::PasteImageFilter<TImage, TImage>::New();
+    pasteFilter->SetSourceImage(movingReader->GetOutput());
+    pasteFilter->SetSourceRegion(movingReader->GetOutput()->GetLargestPossibleRegion());
+    pasteFilter->SetDestinationImage(newImage);
+    pasteFilter->SetDestinationIndex(start);
 
-    typedef itk::LinearInterpolateImageFunction<InputImageType, double> InterpolatorType;
-    InterpolatorType::Pointer interpolator = InterpolatorType::New();
-    filter->SetInterpolator(interpolator);
-    filter->SetDefaultPixelValue(0);
+    // Write the pasted file to an intermediate file
+    auto intermediateWriter = itk::ImageFileWriter<TImage>::New();
+    intermediateWriter->SetFileName(tmpFilename);
+    intermediateWriter->SetInput(pasteFilter->GetOutput());
+    intermediateWriter->Update();
 
-    reader->Update();
+    // Now subtract the fixed image and the new image created by the paste filter
+    auto subtractFilter = itk::SubtractImageFilter<TImage, TImage, TImage>::New();
+    subtractFilter->SetInput1(fixedReader->GetOutput());
+    subtractFilter->SetInput2(pasteFilter->GetOutput());
 
-    const InputImageType* inputImage = reader->GetOutput();
-    const InputImageType::SpacingType& spacing = inputImage->GetSpacing();
-    const InputImageType::PointType& origin    = inputImage->GetOrigin();
-    InputImageType::SizeType size = inputImage->GetLargestPossibleRegion().GetSize();
+    auto writer = itk::ImageFileWriter<TImage>::New();
+    writer->SetFileName(outputFilename);
+    writer->SetInput(subtractFilter->GetOutput());
 
-    // Configure filter
-    filter->SetOutputOrigin( origin );
-    filter->SetOutputSpacing( spacing );
-    filter->SetOutputDirection( inputImage->GetDirection() );
-    filter->SetSize( size );
-    filter->SetInput( reader->GetOutput() );
-    writer->SetInput( filter->GetOutput() );
-
-    //    Rotations are performed around the origin of physical coordinates---not
-    //    the image origin nor the image center. Hence, the process of
-    //    positioning the output image frame as it is shown in Figure
-    //    \ref{fig:ResampleImageFilterOutput10} requires three steps.    First, the
-    //    image origin must be moved to the origin of the coordinate system. This
-    //    is done by applying a translation equal to the negative values of the
-    //    image origin.
-    //
-    TransformType::OutputVectorType translation1;
-    const double imageCenterX = origin[0] + spacing[0] * size[0] / 2.0;
-    const double imageCenterY = origin[1] + spacing[1] * size[1] / 2.0;
-    const double imageCenterZ = origin[2] + spacing[2] * size[2] / 2.0;
-    translation1[0] = -imageCenterX;
-    translation1[1] = -imageCenterY;
-    translation1[2] = -imageCenterZ;
-    transform->Translate( translation1 );
-
-    std::cout << "imageCenterX = " << imageCenterX << std::endl;
-    std::cout << "imageCenterY = " << imageCenterY << std::endl;
-    std::cout << "imageCenterZ = " << imageCenterZ << std::endl;
-
-    //    In a second step, the rotation is specified using the method
-    // Compute the matrix directly and set it to generate the Versor for us.
-    // Rotote along the Z-axis
-    TransformType::AxisType axes;
-    axes[0] = 0.0;
-    axes[1] = 0.0;
-    axes[2] = 1.0;
-    TransformType::VersorType rotation;
-    rotation.Set(axes, deg2rad(atof(argv[3])));
-    transform->SetRotation(rotation);
-
-    //    The third and final step requires translating the image origin back to
-    //    its previous location. This is be done by applying a translation equal
-    //    to the origin values.
-    TransformType::OutputVectorType translation2;
-    translation2[0] =     imageCenterX;
-    translation2[1] =     imageCenterY;
-    translation2[2] =     imageCenterZ;
-    transform->Translate( translation2, false );
-    filter->SetTransform( transform );
-
-    //    The output of the resampling filter is connected to a writer and the
+    //    The output of the resampling resampleFilter is connected to a writer and the
     //    execution of the pipeline is triggered by a writer update.
     try {
         writer->Update();

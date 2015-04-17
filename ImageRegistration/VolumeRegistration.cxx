@@ -1,4 +1,7 @@
+#include <cmath>
+
 // Everything else for this application
+#include "itkRegionOfInterestImageFilter.h"
 #include "VolumeRegistration.h"
 
 
@@ -12,12 +15,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     
-    auto transform    = TTransform::New();
-    auto optimizer    = TOptimizer::New();
-    auto registration = TRegistration::New();
-    auto metric       = TMetric::New();
-    auto fixedReader  = TFixedReader::New();
-    auto movingReader = TMovingReader::New();
+    auto initialTransform = TTransform::New();
+    auto optimizer        = TOptimizer::New();
+    auto registration     = TRegistration::New();
+    auto metric           = TMetric::New();
+    auto fixedReader      = TFixedReader::New();
+    auto movingReader     = TMovingReader::New();
 
     // Parse arguments
     auto fixedFilename  = std::string(argv[1]);
@@ -27,40 +30,73 @@ int main(int argc, char *argv[])
     fixedReader->SetFileName(fixedFilename);
     movingReader->SetFileName(movingFilename);
 
-    // Need to convert images to internal types (floats) first
-    auto fixedCaster  = TFixedCastFilter::New();
-    auto movingCaster = TFixedCastFilter::New();
-    fixedCaster->SetInput(fixedReader->GetOutput());
-    movingCaster->SetInput(movingReader->GetOutput());
+    // Get the size of the fixed image
+    fixedReader->Update();
+    movingReader->Update();
+    auto fixedSize = fixedReader->GetOutput()->GetLargestPossibleRegion().GetSize();
+    auto movingSize = movingReader->GetOutput()->GetLargestPossibleRegion().GetSize();
 
-    // Set up transform initializer
-    auto initializer = TTransformInitializer::New();
-    initializer->SetTransform(transform);
-    initializer->SetFixedImage(fixedCaster->GetOutput());
-    initializer->SetMovingImage(movingCaster->GetOutput());
-    initializer->GeometryOn();
-    initializer->InitializeTransform();
+    // Extract a region of interest from the fixed reader in order to register to that
+    /*
+    auto roiExtractor = itk::RegionOfInterestImageFilter<TFixedImage, TFixedImage>::New();
+    roiExtractor->SetInput(fixedReader->GetOutput());
+    TFixedImage::IndexType start;
+    start[0] = uint32_t( floor(fixedSize[0] * 0.45 - movingSize[0] / 2)) - 50;
+    start[1] = uint32_t( floor(fixedSize[1] * 0.55 - movingSize[1] / 2)) - 50;
+    start[2] = 50;
+    TFixedImage::SizeType size;
+    size[0] = movingSize[0] + 100;
+    size[1] = movingSize[1] + 100;
+    size[2] = movingSize[2] + 100;
+    std::cout << "Fixed size   = " << fixedSize << std::endl;
+    std::cout << "Moving size  = " << movingSize << std::endl;
+    std::cout << "Region start = " << start << std::endl;
+    std::cout << "Region size  = " << size << std::endl;
+    TFixedImage::RegionType regionOfInterest(start, size);
+    roiExtractor->SetRegionOfInterest(regionOfInterest);
+    */
 
-    // Set up transform with good first guess parameters
-    TTransform::VersorType rotation;
+    /*
+     * Set up initial first transformation - best guess
+     */
+    // Rotation
     TTransform::VectorType axis;
     axis[0] = 0.0;
     axis[1] = 0.0;
     axis[2] = 1.0;
-    const double angle = 0;
+    const double angle = 0.0;
+    TTransform::VersorType rotation;
     rotation.Set(axis, angle);
-    transform->SetRotation(rotation);
-    transform->SetScale(1.0);
+    initialTransform->SetRotation(rotation);
+
+    // Scaling
+    initialTransform->SetScale(1.0);
+
+    // Translation
+    TTransform::TranslationType translate;
+    translate[0] = uint32_t( floor(fixedSize[0] * 0.45) );
+    translate[1] = uint32_t( floor(fixedSize[1] * 0.55) );
+    translate[2] = 107;
+    std::cout << "Translating " << translate << std::endl;
+    initialTransform->SetTranslation(translate);
+
+    // Set up initialTransform initializer
+    auto initializer = TTransformInitializer::New();
+    initializer->SetTransform(initialTransform);
+    initializer->SetFixedImage(fixedReader->GetOutput());
+    initializer->SetMovingImage(movingReader->GetOutput());
+    initializer->GeometryOn();
+    initializer->InitializeTransform();
 
     // Connect all components
     registration->SetOptimizer(optimizer);
     registration->SetMetric(metric);
-    registration->SetInitialTransform(transform);
-    registration->SetFixedImage(fixedCaster->GetOutput());
-    registration->SetMovingImage(movingCaster->GetOutput());
+    registration->SetInitialTransform(initialTransform);
+    registration->SetFixedImage(fixedReader->GetOutput());
+    registration->SetMovingImage(movingReader->GetOutput());
 
     // Configure the Optimizer
-    TOptimizer::ScalesType optimizerScales(transform->GetNumberOfParameters());
+    TOptimizer::ScalesType optimizerScales(initialTransform->GetNumberOfParameters());
     const double translationScale = 1.0 / 1000.0;
     optimizerScales[0] = 1.0;
     optimizerScales[1] = 1.0;
@@ -124,7 +160,7 @@ int main(int argc, char *argv[])
     std::cout << "Offset = " << std::endl << finalTransform->GetOffset() << std::endl;
 
     // Write the registered image out to a file so we can look at it and visually compare
-    // 1. Apply transform to the fixed image to make it look like the moving image
+    // 1. Apply initialTransform to the fixed image to make it look like the moving image
     /*
     ResampleFilterType::Pointer resampler = ResampleFilterType::New();
     resampler->SetTransform(finalTransform);

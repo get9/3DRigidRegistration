@@ -75,13 +75,13 @@ int main(int argc, char * argv[] )
     // Scale the translation components of the Transform in the Optimizer
     using TOptimizer = itk::LevenbergMarquardtOptimizer;
     TOptimizer::ScalesType scales(transform->GetNumberOfParameters());
-    const double translationScale = 1000.0;
     const double rotationScale    = 1.0;
+    const double translationScale = 1000.0;
     const double scaleScale       = 1.0;
     scales[0] = 1.0 / rotationScale;
     scales[1] = 1.0 / rotationScale;
     scales[2] = 1.0 / rotationScale;
-    scales[3] = 1.0 / rotationScale;
+    scales[3] = 1.0 / translationScale;
     scales[4] = 1.0 / translationScale;
     scales[5] = 1.0 / translationScale;
     scales[6] = 1.0 / scaleScale;
@@ -91,7 +91,7 @@ int main(int argc, char * argv[] )
     const uint64_t numberOfIterations =  1000;
     const double   gradientTolerance  =  1e-7; // convergence criterion
     const double   valueTolerance     =  1e-7; // convergence criterion
-    const double   epsilonFunction    =  1e-7; // convergence criterion
+    const double   epsilonFunction    =  1e-10; // convergence criterion
     optimizer->SetScales(scales);
     optimizer->SetNumberOfIterations(numberOfIterations);
     optimizer->SetValueTolerance(valueTolerance);
@@ -99,9 +99,28 @@ int main(int argc, char * argv[] )
     optimizer->SetEpsilonFunction(epsilonFunction);
     optimizer->SetUseCostFunctionGradient(false);
 
-    // Start with identity transform (we probably won't know what transform to 
-    // start with
-    transform->SetIdentity();
+    // Set best-guess starting transform
+    TTransform::VectorType axis;
+    axis[0] = 0.0;
+    axis[1] = 0.0;
+    axis[2] = 1.0;
+    const double angle = 0.0;
+    TTransform::VersorType rotation;
+    rotation.Set(axis, angle);
+    transform->SetRotation(rotation);
+
+    // Scaling
+    transform->SetScale(1.0);
+
+    // Translation
+    TTransform::TranslationType translate;
+    translate[0] = 451;
+    translate[1] = 607;
+    translate[2] = 107;
+    std::cout << "Translating " << translate << std::endl;
+    transform->SetTranslation(translate);
+
+    // Hook up initial transform to registration object
     registration->SetInitialTransformParameters(transform->GetParameters());
 
     // Finally, connect all the components required for the registration
@@ -112,8 +131,8 @@ int main(int argc, char * argv[] )
     registration->SetMovingPointSet(moving);
 
     // Connect an observer
-    //CommandIterationUpdate::Pointer observer = CommandIterationUpdate::New();
-    //optimizer->AddObserver(itk::IterationEvent(), observer);
+    CommandIterationUpdate::Pointer observer = CommandIterationUpdate::New();
+    optimizer->AddObserver(itk::IterationEvent(), observer);
 
     // Run registration
     try {
@@ -122,6 +141,8 @@ int main(int argc, char * argv[] )
         std::cout << e << std::endl;
         return EXIT_FAILURE;
     }
+
+    std::cout << "Stopped because: " << optimizer->GetStopConditionDescription() << std::endl;
 
     // Get average difference of optimizer positions for each point
     double sum = 0.0;
@@ -142,7 +163,6 @@ int main(int argc, char * argv[] )
     std::cout << " Translation Y   = " << finalParameters[4]  << std::endl;
     std::cout << " Translation Z   = " << finalParameters[5]  << std::endl;
     std::cout << " Isotropic Scale = " << finalParameters[6]  << std::endl;
-    //std::cout << " Metric value    = " << optimizer->GetValue() << std::endl;
     std::cout << std::endl;
 
     // Print out transformation matrix
@@ -155,11 +175,11 @@ int main(int argc, char * argv[] )
     std::cout << "Scale  = " << finalTransform->GetScale() << std::endl;
 
     // Run through moving PointSet and map back to fixed PointSet, verify they're close
-    //for (auto i = 0; i < moving->GetNumberOfPoints(); ++i) {
-    //    auto transformedMovingPoint = transform->TransformPoint(moving->GetPoint(i));
-    //    auto pointDifference = transformedMovingPoint - fixed->GetPoint(i);
-    //    std::cout << pointDifference.GetSquaredNorm() << std::endl;
-    //}
+    for (auto i = 0; i < moving->GetNumberOfPoints(); ++i) {
+        auto transformedMovingPoint = finalTransform->TransformPoint(moving->GetPoint(i));
+        auto pointDifference = transformedMovingPoint - fixed->GetPoint(i);
+        std::cout << pointDifference.GetNorm() << std::endl;
+    }
 
     return EXIT_SUCCESS;
 }

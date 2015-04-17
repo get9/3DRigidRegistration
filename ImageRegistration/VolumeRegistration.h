@@ -22,24 +22,19 @@
 const auto TDimension = 3;
 
 // Pixel types. Externally, they are of type TPixel. Internally, they are of type TInternalPixel
-using TPixel         = uint8_t;
-using TInternalPixel = double;
+using TPixel         = float;
+using TInternalPixel = float;
 
 // Image types
 using TFixedImage    = itk::Image<TPixel, TDimension>;
 using TMovingImage   = itk::Image<TPixel, TDimension>;
-using TInternalImage = itk::Image<TInternalPixel, TDimension>;
-
-// Casters (to go from external to internal representation)
-using TFixedCastFilter  = itk::CastImageFilter<TFixedImage, TInternalImage>;
-using TMovingCastFilter = itk::CastImageFilter<TMovingImage, TInternalImage>;
 
 // Registration stuff
-using TTransform            = itk::Similarity3DTransform<TInternalPixel>;
-using TOptimizer            = itk::RegularStepGradientDescentOptimizerv4<TInternalPixel>;
-using TRegistration         = itk::ImageRegistrationMethodv4<TInternalImage, TInternalImage, TTransform>;
-using TMetric               = itk::MeanSquaresImageToImageMetricv4<TInternalImage, TInternalImage>;
-using TTransformInitializer = itk::CenteredTransformInitializer<TTransform, TInternalImage, TInternalImage>;
+using TTransform            = itk::Similarity3DTransform<double>;
+using TOptimizer            = itk::RegularStepGradientDescentOptimizerv4<double>;
+using TRegistration         = itk::ImageRegistrationMethodv4<TFixedImage, TMovingImage, TTransform>;
+using TMetric               = itk::MeanSquaresImageToImageMetricv4<TFixedImage, TMovingImage>;
+using TTransformInitializer = itk::CenteredTransformInitializer<TTransform, TFixedImage, TMovingImage>;
 
 // Readers
 using TFixedReader  = itk::ImageFileReader<TFixedImage>;
@@ -58,7 +53,7 @@ class CommandIterationUpdate : public itk::Command
         CommandIterationUpdate() {};
     
     public:
-        typedef itk::RegularStepGradientDescentOptimizerv4<TInternalPixel> OptimizerType;
+        typedef itk::RegularStepGradientDescentOptimizerv4<double> OptimizerType;
         typedef const OptimizerType* OptimizerPointer;
         void Execute(itk::Object* caller, const itk::EventObject & event)
         {
